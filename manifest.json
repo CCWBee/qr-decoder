@@ -1,0 +1,24 @@
+{
+    "name": "QR Code Decoder",
+    "short_name": "QR Decoder",
+    "description": "Scan and decode animated QR code sequences for airgapped data transfer",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#1a1a2e",
+    "theme_color": "#1a1a2e",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%231a1a2e' width='192' height='192' rx='20'/><rect fill='%2300d9ff' x='40' y='40' width='30' height='30'/><rect fill='%2300d9ff' x='80' y='40' width='30' height='30'/><rect fill='%2300d9ff' x='120' y='40' width='30' height='30'/><rect fill='%2300d9ff' x='40' y='80' width='30' height='30'/><rect fill='%2300d9ff' x='120' y='80' width='30' height='30'/><rect fill='%2300d9ff' x='40' y='120' width='30' height='30'/><rect fill='%2300d9ff' x='80' y='120' width='30' height='30'/><rect fill='%2300d9ff' x='120' y='120' width='30' height='30'/></svg>",
+            "sizes": "192x192",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%231a1a2e' width='512' height='512' rx='50'/><rect fill='%2300d9ff' x='100' y='100' width='80' height='80'/><rect fill='%2300d9ff' x='215' y='100' width='80' height='80'/><rect fill='%2300d9ff' x='330' y='100' width='80' height='80'/><rect fill='%2300d9ff' x='100' y='215' width='80' height='80'/><rect fill='%2300d9ff' x='330' y='215' width='80' height='80'/><rect fill='%2300d9ff' x='100' y='330' width='80' height='80'/><rect fill='%2300d9ff' x='215' y='330' width='80' height='80'/><rect fill='%2300d9ff' x='330' y='330' width='80' height='80'/></svg>",
+            "sizes": "512x512",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}

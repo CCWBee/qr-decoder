@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>QR Code Decoder</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%231a1a2e' width='192' height='192' rx='20'/><rect fill='%2300d9ff' x='40' y='40' width='30' height='30'/><rect fill='%2300d9ff' x='80' y='40' width='30' height='30'/><rect fill='%2300d9ff' x='120' y='40' width='30' height='30'/><rect fill='%2300d9ff' x='40' y='80' width='30' height='30'/><rect fill='%2300d9ff' x='120' y='80' width='30' height='30'/><rect fill='%2300d9ff' x='40' y='120' width='30' height='30'/><rect fill='%2300d9ff' x='80' y='120' width='30' height='30'/><rect fill='%2300d9ff' x='120' y='120' width='30' height='30'/></svg>">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>QR Decoder</h1>
+            <p class="subtitle">Scan animated QR codes to receive data</p>
+        </header>
+
+        <div id="cameraSection" class="section">
+            <div class="video-container">
+                <video id="video" autoplay playsinline></video>
+                <canvas id="canvas" class="hidden"></canvas>
+                <div id="scanOverlay" class="scan-overlay">
+                    <div class="scan-frame"></div>
+                </div>
+            </div>
+            <button id="cameraBtn" class="primary-btn">Start Camera</button>
+        </div>
+
+        <div id="progressSection" class="section hidden">
+            <div class="session-info">
+                <span>Session: <strong id="sessionId">-</strong></span>
+                <span>Progress: <strong id="progressText">0/0</strong></span>
+                <span id="compressionInfo" class="hidden">Compressed</span>
+            </div>
+            <div id="chunkGrid" class="chunk-grid"></div>
+        </div>
+
+        <div id="resultSection" class="section hidden">
+            <div class="result-header">
+                <h2>Received Data</h2>
+                <span id="resultStats"></span>
+            </div>
+            <div class="result-container">
+                <pre id="resultText"></pre>
+            </div>
+            <button id="copyBtn" class="copy-btn">Copy All</button>
+            <button id="resetBtn" class="secondary-btn">Scan New</button>
+        </div>
+
+        <div id="errorSection" class="section hidden">
+            <p id="errorMessage" class="error-message"></p>
+        </div>
+
+        <div id="installPrompt" class="install-prompt hidden">
+            <p>Install this app for offline use</p>
+            <button id="installBtn" class="install-btn">Install</button>
+            <button id="dismissBtn" class="dismiss-btn">Not now</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
