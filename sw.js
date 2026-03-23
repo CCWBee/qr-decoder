@@ -1,4 +1,4 @@
-const CACHE_NAME = 'qr-decoder-v2';
+const CACHE_NAME = 'qr-decoder-v3';
 const ASSETS = [
     './',
     './index.html',
@@ -36,36 +36,23 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Fetch event - serve from cache, fall back to network
+// Fetch event - network first, fall back to cache
 self.addEventListener('fetch', (event) => {
     event.respondWith(
-        caches.match(event.request)
+        fetch(event.request)
             .then((response) => {
-                if (response) {
-                    return response;
+                // Cache successful responses
+                if (response && response.status === 200) {
+                    const responseToCache = response.clone();
+                    caches.open(CACHE_NAME)
+                        .then((cache) => cache.put(event.request, responseToCache));
                 }
-
-                return fetch(event.request)
-                    .then((response) => {
-                        // Don't cache non-successful responses
-                        if (!response || response.status !== 200 || response.type !== 'basic') {
-                            return response;
-                        }
-
-                        // Clone the response
-                        const responseToCache = response.clone();
-
-                        caches.open(CACHE_NAME)
-                            .then((cache) => {
-                                cache.put(event.request, responseToCache);
-                            });
-
-                        return response;
-                    });
+                return response;
             })
             .catch(() => {
-                // Return offline fallback if available
-                return caches.match('./index.html');
+                // Offline - serve from cache
+                return caches.match(event.request)
+                    .then((cached) => cached || caches.match('./index.html'));
             })
     );
 });
