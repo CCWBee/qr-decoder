@@ -2,7 +2,7 @@
     "name": "QR Code Decoder",
     "short_name": "QR Decoder",
     "description": "Scan and decode animated QR code sequences for airgapped data transfer",
-    "start_url": "/",
+    "start_url": "./",
     "display": "standalone",
     "background_color": "#1a1a2e",
     "theme_color": "#1a1a2e",

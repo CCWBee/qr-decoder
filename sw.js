@@ -1,10 +1,10 @@
-const CACHE_NAME = 'qr-decoder-v1';
+const CACHE_NAME = 'qr-decoder-v2';
 const ASSETS = [
-    '/',
-    '/index.html',
-    '/app.js',
-    '/style.css',
-    '/manifest.json',
+    './',
+    './index.html',
+    './app.js',
+    './style.css',
+    './manifest.json',
     'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js',
     'https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js'
 ];
@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
             })
             .catch(() => {
                 // Return offline fallback if available
-                return caches.match('/index.html');
+                return caches.match('./index.html');
             })
     );
 });
