@@ -12,6 +12,7 @@ const resultSection = document.getElementById('resultSection');
 const resultText = document.getElementById('resultText');
 const resultStats = document.getElementById('resultStats');
 const copyBtn = document.getElementById('copyBtn');
+const saveBtn = document.getElementById('saveBtn');
 const resetBtn = document.getElementById('resetBtn');
 const errorSection = document.getElementById('errorSection');
 const errorMessage = document.getElementById('errorMessage');
@@ -32,6 +33,7 @@ let animationId = null;
 function init() {
     cameraBtn.addEventListener('click', toggleCamera);
     copyBtn.addEventListener('click', copyResult);
+    saveBtn.addEventListener('click', saveResult);
     resetBtn.addEventListener('click', reset);
 
     // Register service worker
@@ -265,6 +267,22 @@ async function copyResult() {
         }
         document.body.removeChild(textarea);
     }
+}
+
+function saveResult() {
+    const text = resultText.textContent;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `qr-scan-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    saveBtn.textContent = 'Saved!';
+    setTimeout(() => { saveBtn.textContent = 'Save .txt'; }, 2000);
 }
 
 function reset() {

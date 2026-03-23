@@ -154,6 +154,28 @@ header h1 {
     background: #00aa55;
 }
 
+.save-btn {
+    width: 100%;
+    padding: 16px;
+    background: #16213e;
+    color: #00d9ff;
+    border: 2px solid #00d9ff;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 10px;
+}
+
+.save-btn:hover {
+    background: #1a2a4e;
+}
+
+.save-btn:active {
+    transform: scale(0.98);
+}
+
 /* Progress Section */
 .session-info {
     display: flex;
