@@ -28,6 +28,7 @@ let receivedChunks = new Map();
 let totalChunks = 0;
 let isCompressed = false;
 let animationId = null;
+let pendingFile = null; // set when the received payload is a wrapped file
 
 // Initialize
 function init() {
@@ -218,6 +219,17 @@ function completeTransfer() {
             }
         }
 
+        // File transfer? ('QRF1' magic + 2-byte header len + JSON{n,m} header + file bytes)
+        if (finalBytes.length > 6 &&
+            finalBytes[0] === 0x51 && finalBytes[1] === 0x52 &&
+            finalBytes[2] === 0x46 && finalBytes[3] === 0x31) {
+            const hdrLen = (finalBytes[4] << 8) | finalBytes[5];
+            const meta = JSON.parse(new TextDecoder().decode(finalBytes.subarray(6, 6 + hdrLen)));
+            const body = finalBytes.slice(6 + hdrLen);
+            showFile(meta.n || 'file.bin', meta.m || 'application/octet-stream', body);
+            return;
+        }
+
         // Decode to text
         const decoder = new TextDecoder();
         const text = decoder.decode(finalBytes);
@@ -233,6 +245,17 @@ function completeTransfer() {
     } catch (err) {
         showError('Failed to decode data: ' + err.message);
     }
+}
+
+// Received a file: show it at the bottom with a Save button (binary-safe)
+function showFile(name, type, bytes) {
+    pendingFile = { name, type, bytes };
+    resultText.textContent = `📎 ${name}\n${bytes.length} bytes` + (type ? `\n${type}` : '');
+    resultStats.textContent = `${bytes.length} bytes`;
+    copyBtn.classList.add('hidden');   // copy is meaningless for binary
+    saveBtn.textContent = 'Save File';
+    resultSection.classList.remove('hidden');
+    progressSection.classList.remove('hidden');
 }
 
 // Result handling
@@ -270,19 +293,27 @@ async function copyResult() {
 }
 
 function saveResult() {
-    const text = resultText.textContent;
-    const blob = new Blob([text], { type: 'text/plain' });
+    let blob, filename, btnLabel;
+    if (pendingFile) {
+        blob = new Blob([pendingFile.bytes], { type: pendingFile.type });
+        filename = pendingFile.name;
+        btnLabel = 'Save File';
+    } else {
+        blob = new Blob([resultText.textContent], { type: 'text/plain' });
+        filename = `qr-scan-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.txt`;
+        btnLabel = 'Save .txt';
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `qr-scan-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.txt`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
     saveBtn.textContent = 'Saved!';
-    setTimeout(() => { saveBtn.textContent = 'Save .txt'; }, 2000);
+    setTimeout(() => { saveBtn.textContent = btnLabel; }, 2000);
 }
 
 function reset() {
@@ -290,6 +321,7 @@ function reset() {
     receivedChunks.clear();
     totalChunks = 0;
     isCompressed = false;
+    pendingFile = null;
 
     progressSection.classList.add('hidden');
     resultSection.classList.add('hidden');
@@ -297,6 +329,8 @@ function reset() {
 
     chunkGrid.innerHTML = '';
     resultText.textContent = '';
+    copyBtn.classList.remove('hidden');
+    saveBtn.textContent = 'Save .txt';
 }
 
 // Error handling
