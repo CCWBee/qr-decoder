@@ -149,16 +149,12 @@ function updateScanFeedback(now) {
     scanFrame.classList.toggle('locked', locked);
     scanLamp.classList.toggle('on', locked);
     scanState.textContent = locked ? 'LOCKED' : 'Searching…';
-    scanRate.textContent = locked ? (decodeTimes.length + ' reads/sec') : 'line up the QR';
-    drawOutline(locked, now);
+    scanRate.textContent = locked ? (decodeTimes.length + ' reads/sec') : (emaCorners ? 're-aim to the box' : 'line up the QR');
+    drawOutline(locked);
 }
 
 function updateOutline(loc) {
-    // keep the overlay canvas in the video's pixel space so object-fit lines it up
-    if (video.videoWidth && scanOutline.width !== video.videoWidth) {
-        scanOutline.width = video.videoWidth;
-        scanOutline.height = video.videoHeight;
-    }
+    // corners are in the video's pixel space; we map them at draw time
     const n = {
         tl: loc.topLeftCorner, tr: loc.topRightCorner,
         br: loc.bottomRightCorner, bl: loc.bottomLeftCorner
@@ -174,23 +170,32 @@ function updateOutline(loc) {
     }
 }
 
-function drawOutline(locked, now) {
+function drawOutline(locked) {
+    // Size the overlay to its displayed CSS box, then map video-pixel coords into it
+    // using the SAME object-fit:cover math the <video> uses (explicit = reliable on iOS).
+    const cw = scanOutline.clientWidth, ch = scanOutline.clientHeight;
+    if (!cw || !ch) return;
+    if (scanOutline.width !== cw) scanOutline.width = cw;
+    if (scanOutline.height !== ch) scanOutline.height = ch;
     const octx = scanOutline.getContext('2d');
-    octx.clearRect(0, 0, scanOutline.width, scanOutline.height);
-    if (!emaCorners) return;
-    if (now - lastDecodeAt > 2500) { emaCorners = null; return; } // forget stale positions
-    octx.lineWidth = Math.max(4, scanOutline.width * 0.008);
+    octx.clearRect(0, 0, cw, ch);
+    if (!emaCorners || !video.videoWidth) return;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const s = Math.max(cw / vw, ch / vh);              // cover scale
+    const ox = (cw - vw * s) / 2, oy = (ch - vh * s) / 2;
+    const m = p => [p.x * s + ox, p.y * s + oy];
+    const tl = m(emaCorners.tl), tr = m(emaCorners.tr), br = m(emaCorners.br), bl = m(emaCorners.bl);
+    octx.lineWidth = Math.max(3, cw * 0.013);
     octx.lineJoin = 'round';
-    // bright green when locked; dim "last seen" guide otherwise (re-aim to it)
-    octx.strokeStyle = locked ? '#00ff88' : 'rgba(0,255,136,0.4)';
+    // bright when locked; dim but still visible as a re-aim guide after lock is lost
+    octx.strokeStyle = locked ? '#00ff88' : 'rgba(0,255,136,0.55)';
     octx.shadowColor = '#00ff88';
-    octx.shadowBlur = locked ? 14 : 0;
-    const c = emaCorners;
+    octx.shadowBlur = locked ? 14 : 6;
     octx.beginPath();
-    octx.moveTo(c.tl.x, c.tl.y);
-    octx.lineTo(c.tr.x, c.tr.y);
-    octx.lineTo(c.br.x, c.br.y);
-    octx.lineTo(c.bl.x, c.bl.y);
+    octx.moveTo(tl[0], tl[1]);
+    octx.lineTo(tr[0], tr[1]);
+    octx.lineTo(br[0], br[1]);
+    octx.lineTo(bl[0], bl[1]);
     octx.closePath();
     octx.stroke();
 }
