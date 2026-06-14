@@ -19,6 +19,12 @@ const errorMessage = document.getElementById('errorMessage');
 const installPrompt = document.getElementById('installPrompt');
 const installBtn = document.getElementById('installBtn');
 const dismissBtn = document.getElementById('dismissBtn');
+const scanFrame = document.getElementById('scanFrame');
+const scanOutline = document.getElementById('scanOutline');
+const scanStatus = document.getElementById('scanStatus');
+const scanLamp = document.getElementById('scanLamp');
+const scanState = document.getElementById('scanState');
+const scanRate = document.getElementById('scanRate');
 
 // State
 let stream = null;
@@ -29,6 +35,10 @@ let totalChunks = 0;
 let isCompressed = false;
 let animationId = null;
 let pendingFile = null; // set when the received payload is a wrapped file
+// Scan dial-in feedback
+let decodeTimes = [];   // timestamps of successful decodes (1s sliding window)
+let lastDecodeAt = 0;
+let emaCorners = null;  // smoothed detected QR corners for the live outline
 
 // Initialize
 function init() {
@@ -58,9 +68,10 @@ async function startCamera() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({
             video: {
-                facingMode: 'environment',
-                width: { ideal: 1280 },
-                height: { ideal: 1280 }
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1920 },
+                height: { ideal: 1920 },
+                frameRate: { ideal: 30 }
             }
         });
         video.srcObject = stream;
@@ -69,9 +80,8 @@ async function startCamera() {
         cameraBtn.textContent = 'Stop Camera';
         cameraBtn.classList.add('active');
 
-        // Set canvas size
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        resetScanFeedback();
+        scanStatus.classList.remove('hidden');
 
         scanning = true;
         scan();
@@ -96,13 +106,22 @@ function stopCamera() {
     video.srcObject = null;
     cameraBtn.textContent = 'Start Camera';
     cameraBtn.classList.remove('active');
+    scanStatus.classList.add('hidden');
+    resetScanFeedback();
 }
 
 // QR Scanning
 function scan() {
     if (!scanning) return;
+    const now = performance.now();
 
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth) {
+        // Size the work canvas to the live frame EVERY time — fixes the 0x0 case
+        // when the camera wasn't ready at start (decoder looked dead, read nothing)
+        if (canvas.width !== video.videoWidth) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
@@ -112,10 +131,79 @@ function scan() {
 
         if (code) {
             processQRCode(code.data);
+            decodeTimes.push(now);
+            lastDecodeAt = now;
+            if (code.location) updateOutline(code.location);
         }
     }
 
+    while (decodeTimes.length && now - decodeTimes[0] > 1000) decodeTimes.shift();
+    updateScanFeedback(now);
+
     animationId = requestAnimationFrame(scan);
+}
+
+// --- Dial-in feedback: lock lamp, reads/sec, and a live outline on the QR ---
+function updateScanFeedback(now) {
+    const locked = (now - lastDecodeAt) < 300;
+    scanFrame.classList.toggle('locked', locked);
+    scanLamp.classList.toggle('on', locked);
+    scanState.textContent = locked ? 'LOCKED' : 'Searching…';
+    scanRate.textContent = locked ? (decodeTimes.length + ' reads/sec') : 'line up the QR';
+    drawOutline(locked, now);
+}
+
+function updateOutline(loc) {
+    // keep the overlay canvas in the video's pixel space so object-fit lines it up
+    if (video.videoWidth && scanOutline.width !== video.videoWidth) {
+        scanOutline.width = video.videoWidth;
+        scanOutline.height = video.videoHeight;
+    }
+    const n = {
+        tl: loc.topLeftCorner, tr: loc.topRightCorner,
+        br: loc.bottomRightCorner, bl: loc.bottomLeftCorner
+    };
+    if (!emaCorners) {
+        emaCorners = { tl:{x:n.tl.x,y:n.tl.y}, tr:{x:n.tr.x,y:n.tr.y}, br:{x:n.br.x,y:n.br.y}, bl:{x:n.bl.x,y:n.bl.y} };
+    } else {
+        const a = 0.5; // smoothing so the box doesn't jitter
+        ['tl','tr','br','bl'].forEach(k => {
+            emaCorners[k].x = emaCorners[k].x * (1 - a) + n[k].x * a;
+            emaCorners[k].y = emaCorners[k].y * (1 - a) + n[k].y * a;
+        });
+    }
+}
+
+function drawOutline(locked, now) {
+    const octx = scanOutline.getContext('2d');
+    octx.clearRect(0, 0, scanOutline.width, scanOutline.height);
+    if (!emaCorners) return;
+    if (now - lastDecodeAt > 2500) { emaCorners = null; return; } // forget stale positions
+    octx.lineWidth = Math.max(4, scanOutline.width * 0.008);
+    octx.lineJoin = 'round';
+    // bright green when locked; dim "last seen" guide otherwise (re-aim to it)
+    octx.strokeStyle = locked ? '#00ff88' : 'rgba(0,255,136,0.4)';
+    octx.shadowColor = '#00ff88';
+    octx.shadowBlur = locked ? 14 : 0;
+    const c = emaCorners;
+    octx.beginPath();
+    octx.moveTo(c.tl.x, c.tl.y);
+    octx.lineTo(c.tr.x, c.tr.y);
+    octx.lineTo(c.br.x, c.br.y);
+    octx.lineTo(c.bl.x, c.bl.y);
+    octx.closePath();
+    octx.stroke();
+}
+
+function resetScanFeedback() {
+    decodeTimes = [];
+    lastDecodeAt = 0;
+    emaCorners = null;
+    if (scanOutline.width) scanOutline.getContext('2d').clearRect(0, 0, scanOutline.width, scanOutline.height);
+    scanFrame.classList.remove('locked');
+    scanLamp.classList.remove('on');
+    scanState.textContent = 'Searching…';
+    scanRate.textContent = '';
 }
 
 function processQRCode(data) {
@@ -331,6 +419,7 @@ function reset() {
     resultText.textContent = '';
     copyBtn.classList.remove('hidden');
     saveBtn.textContent = 'Save .txt';
+    resetScanFeedback();
 }
 
 // Error handling

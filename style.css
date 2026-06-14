@@ -75,15 +75,56 @@ header h1 {
 .scan-frame {
     width: 70%;
     height: 70%;
-    border: 3px solid #00d9ff;
+    border: 3px solid rgba(0, 217, 255, 0.5);
     border-radius: 12px;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
-    animation: pulse 2s ease-in-out infinite;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-@keyframes pulse {
-    0%, 100% { border-color: #00d9ff; }
-    50% { border-color: #00ff88; }
+/* Border goes solid green only when a code is actually being decoded */
+.scan-frame.locked {
+    border-color: #00ff88;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45), 0 0 18px #00ff88;
+}
+
+/* Live outline drawn over the detected QR; matches the video via object-fit */
+.scan-outline {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+/* Dial-in status: lamp + state + reads/sec */
+.scan-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: #aaa;
+}
+
+.scan-status .lamp {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #555;
+    transition: background 0.15s, box-shadow 0.15s;
+}
+
+.scan-status .lamp.on {
+    background: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+}
+
+#scanRate {
+    color: #00d9ff;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Buttons */

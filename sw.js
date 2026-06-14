@@ -1,4 +1,4 @@
-const CACHE_NAME = 'qr-decoder-v5';
+const CACHE_NAME = 'qr-decoder-v6';
 const ASSETS = [
     './',
     './index.html',

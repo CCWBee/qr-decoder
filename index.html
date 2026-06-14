@@ -15,16 +15,22 @@
     <div class="app">
         <header>
             <h1>QR Decoder</h1>
-            <p class="subtitle">Scan animated QR codes to receive data <span style="opacity:0.5">· v4 (files)</span></p>
+            <p class="subtitle">Scan animated QR codes to receive data <span style="opacity:0.5">· v6 (files · scan-lock)</span></p>
         </header>
 
         <div id="cameraSection" class="section">
             <div class="video-container">
                 <video id="video" autoplay playsinline></video>
                 <canvas id="canvas" class="hidden"></canvas>
+                <canvas id="scanOutline" class="scan-outline"></canvas>
                 <div id="scanOverlay" class="scan-overlay">
-                    <div class="scan-frame"></div>
+                    <div id="scanFrame" class="scan-frame"></div>
                 </div>
+            </div>
+            <div id="scanStatus" class="scan-status hidden">
+                <span id="scanLamp" class="lamp"></span>
+                <span id="scanState">Searching…</span>
+                <span id="scanRate"></span>
             </div>
             <button id="cameraBtn" class="primary-btn">Start Camera</button>
         </div>
