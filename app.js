@@ -16,9 +16,6 @@ const saveBtn = document.getElementById('saveBtn');
 const resetBtn = document.getElementById('resetBtn');
 const errorSection = document.getElementById('errorSection');
 const errorMessage = document.getElementById('errorMessage');
-const installPrompt = document.getElementById('installPrompt');
-const installBtn = document.getElementById('installBtn');
-const dismissBtn = document.getElementById('dismissBtn');
 const scanFrame = document.getElementById('scanFrame');
 const scanOutline = document.getElementById('scanOutline');
 const scanStatus = document.getElementById('scanStatus');
@@ -38,10 +35,14 @@ let pendingFile = null; // set when the received payload is a wrapped file
 // Scan dial-in feedback
 let decodeTimes = [];   // timestamps of successful decodes (1s sliding window)
 let lastDecodeAt = 0;
-let emaCorners = null;  // smoothed detected QR corners for the live outline
+let emaCorners = null;  // smoothed detected QR corners (normalised 0..1) for the outline
+let decoderBusy = false;
+let zxing = null, zxingReady = false; // ZXing-wasm: stronger decoder than jsQR
+const LOCK_MS = 700;    // how long "LOCKED" lingers after the last decode
 
 // Initialize
 function init() {
+    loadDecoder();
     cameraBtn.addEventListener('click', toggleCamera);
     copyBtn.addEventListener('click', copyResult);
     saveBtn.addEventListener('click', saveResult);
@@ -110,12 +111,54 @@ function stopCamera() {
     resetScanFeedback();
 }
 
+// Load the strong decoder (ZXing-C++ compiled to WASM). Falls back to jsQR if it
+// can't load. Cached by the service worker after first online load, so works offline.
+async function loadDecoder() {
+    try {
+        const mod = await import('https://cdn.jsdelivr.net/npm/zxing-wasm@2/+esm');
+        try { await mod.readBarcodes(new ImageData(2, 2), { formats: ['QRCode'] }); } catch (e) {} // warm wasm
+        zxing = mod;
+        zxingReady = true;
+        console.log('Decoder: ZXing-wasm ready');
+    } catch (e) {
+        zxingReady = false;
+        console.log('Decoder: ZXing load failed, using jsQR fallback', e);
+    }
+}
+
+// Decode one frame -> { text, corners:{tl,tr,br,bl} in pixel space } or null
+async function decodeFrame(imageData) {
+    if (zxingReady && zxing) {
+        try {
+            const res = await zxing.readBarcodes(imageData, { tryHarder: true, formats: ['QRCode'], maxNumberOfSymbols: 1 });
+            if (res && res.length && res[0].text) {
+                const p = res[0].position;
+                return { text: res[0].text, corners: { tl: p.topLeft, tr: p.topRight, br: p.bottomRight, bl: p.bottomLeft } };
+            }
+            return null;
+        } catch (e) { /* fall through to jsQR */ }
+    }
+    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+    if (code) {
+        const l = code.location;
+        return { text: code.data, corners: { tl: l.topLeftCorner, tr: l.topRightCorner, br: l.bottomRightCorner, bl: l.bottomLeftCorner } };
+    }
+    return null;
+}
+
+function normalizeCorners(c, w, h) {
+    return {
+        tl: { x: c.tl.x / w, y: c.tl.y / h }, tr: { x: c.tr.x / w, y: c.tr.y / h },
+        br: { x: c.br.x / w, y: c.br.y / h }, bl: { x: c.bl.x / w, y: c.bl.y / h }
+    };
+}
+
 // QR Scanning
 function scan() {
     if (!scanning) return;
     const now = performance.now();
 
-    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth) {
+    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth && !decoderBusy) {
         // Size the work canvas to the live frame EVERY time — fixes the 0x0 case
         // when the camera wasn't ready at start (decoder looked dead, read nothing)
         if (canvas.width !== video.videoWidth) {
@@ -124,17 +167,18 @@ function scan() {
         }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const dw = canvas.width, dh = canvas.height;
 
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert'
-        });
-
-        if (code) {
-            processQRCode(code.data);
-            decodeTimes.push(now);
-            lastDecodeAt = now;
-            if (code.location) updateOutline(code.location);
-        }
+        decoderBusy = true;
+        decodeFrame(imageData).then(result => {
+            decoderBusy = false;
+            if (!scanning || !result) return;
+            const t = performance.now();
+            processQRCode(result.text);
+            decodeTimes.push(t);
+            lastDecodeAt = t;
+            updateOutline(normalizeCorners(result.corners, dw, dh));
+        }).catch(() => { decoderBusy = false; });
     }
 
     while (decodeTimes.length && now - decodeTimes[0] > 1000) decodeTimes.shift();
@@ -143,22 +187,39 @@ function scan() {
     animationId = requestAnimationFrame(scan);
 }
 
-// --- Dial-in feedback: lock lamp, reads/sec, and a live outline on the QR ---
+// --- Dial-in feedback: lock lamp, reads/sec, positional guidance, live outline ---
 function updateScanFeedback(now) {
-    const locked = (now - lastDecodeAt) < 300;
+    const locked = (now - lastDecodeAt) < LOCK_MS;
     scanFrame.classList.toggle('locked', locked);
     scanLamp.classList.toggle('on', locked);
-    scanState.textContent = locked ? 'LOCKED' : 'Searching…';
-    scanRate.textContent = locked ? (decodeTimes.length + ' reads/sec') : (emaCorners ? 're-aim to the box' : 'line up the QR');
+    if (locked) {
+        scanState.textContent = 'LOCKED';
+        scanRate.textContent = decodeTimes.length + ' reads/sec';
+    } else {
+        scanState.textContent = 'Searching…';
+        scanRate.textContent = emaCorners ? positionHint() : 'line up the QR';
+    }
     drawOutline(locked);
 }
 
-function updateOutline(loc) {
-    // corners are in the video's pixel space; we map them at draw time
-    const n = {
-        tl: loc.topLeftCorner, tr: loc.topRightCorner,
-        br: loc.bottomRightCorner, bl: loc.bottomLeftCorner
-    };
+// Use the last detected QR location to nudge the user toward a better position
+function positionHint() {
+    const c = emaCorners; // normalised 0..1
+    const w = Math.hypot(c.tr.x - c.tl.x, c.tr.y - c.tl.y);
+    if (w < 0.30) return 'move closer to the box';
+    if (w > 0.92) return 'move back a little';
+    const cx = (c.tl.x + c.tr.x + c.br.x + c.bl.x) / 4;
+    const cy = (c.tl.y + c.tr.y + c.br.y + c.bl.y) / 4;
+    const dx = cx - 0.5, dy = cy - 0.5;
+    if (Math.abs(dx) > 0.18 || Math.abs(dy) > 0.18) {
+        const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right ▶' : '◀ left') : (dy > 0 ? 'down ▼' : '▲ up');
+        return 'aim ' + dir;
+    }
+    return 're-aim to the box';
+}
+
+function updateOutline(n) {
+    // n: corners normalised 0..1 (decoder-resolution independent)
     if (!emaCorners) {
         emaCorners = { tl:{x:n.tl.x,y:n.tl.y}, tr:{x:n.tr.x,y:n.tr.y}, br:{x:n.br.x,y:n.br.y}, bl:{x:n.bl.x,y:n.bl.y} };
     } else {
@@ -171,7 +232,7 @@ function updateOutline(loc) {
 }
 
 function drawOutline(locked) {
-    // Size the overlay to its displayed CSS box, then map video-pixel coords into it
+    // Size the overlay to its displayed CSS box, then map normalised QR coords into it
     // using the SAME object-fit:cover math the <video> uses (explicit = reliable on iOS).
     const cw = scanOutline.clientWidth, ch = scanOutline.clientHeight;
     if (!cw || !ch) return;
@@ -182,8 +243,9 @@ function drawOutline(locked) {
     if (!emaCorners || !video.videoWidth) return;
     const vw = video.videoWidth, vh = video.videoHeight;
     const s = Math.max(cw / vw, ch / vh);              // cover scale
-    const ox = (cw - vw * s) / 2, oy = (ch - vh * s) / 2;
-    const m = p => [p.x * s + ox, p.y * s + oy];
+    const dispW = vw * s, dispH = vh * s;
+    const ox = (cw - dispW) / 2, oy = (ch - dispH) / 2;
+    const m = p => [p.x * dispW + ox, p.y * dispH + oy]; // p normalised 0..1
     const tl = m(emaCorners.tl), tr = m(emaCorners.tr), br = m(emaCorners.br), bl = m(emaCorners.bl);
     octx.lineWidth = Math.max(3, cw * 0.013);
     octx.lineJoin = 'round';
@@ -436,34 +498,6 @@ function showError(message) {
 function hideError() {
     errorSection.classList.add('hidden');
 }
-
-// PWA Install
-let deferredPrompt;
-
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    installPrompt.classList.remove('hidden');
-});
-
-installBtn.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log('Install outcome:', outcome);
-    deferredPrompt = null;
-    installPrompt.classList.add('hidden');
-});
-
-dismissBtn.addEventListener('click', () => {
-    installPrompt.classList.add('hidden');
-});
-
-window.addEventListener('appinstalled', () => {
-    console.log('PWA installed');
-    installPrompt.classList.add('hidden');
-});
 
 // Start
 init();
